@@ -6,7 +6,7 @@ rm(list=ls())
 library("MatchIt")
 library("survey")
 library("parallel")
-setwd("C:/Users/kecolson/Google Drive/subclassification")
+#setwd("C:/Users/kecolson/Google Drive/subclassification")
 
 # Generate data function -------------------------------------------------------------
 
