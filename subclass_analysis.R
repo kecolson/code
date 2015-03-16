@@ -272,6 +272,7 @@ table(m$A, m$subclass)
 
 analyze <- function(iteration, tx.mech = 1, tx.hetero = F, ATT = F, cor.spec.pscore = T, n.subclass = 10, svy.wt = F, n = 3000) {
   library("MatchIt")
+  library("survey")
   set.seed(iteration)
   print(iteration)
   sample <- generateData(n = n, tx.mech = tx.mech, tx.hetero = tx.hetero, ATT = ATT)
@@ -309,7 +310,8 @@ analyze <- function(iteration, tx.mech = 1, tx.hetero = F, ATT = F, cor.spec.psc
       try(model <- glm(Y ~ A, data = Obs, subset = (Obs$subclass == i)))
       if (sum(Obs$A[Obs$subclass == i])>0 & sum(Obs$A[Obs$subclass==i]==0)>0) {
         ests[i] <-  summary(model)$coefficients[2,1] 
-        if (ATT == F) var[i]  <- (summary(model)$coefficients[2,2])^2
+        #if (ATT == F) var[i]  <- (summary(model)$coefficients[2,2])^2
+        var[i]  <- (summary(model)$coefficients[2,2])^2
       }
     }
   }
