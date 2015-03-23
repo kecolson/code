@@ -1,4 +1,4 @@
-# Subclassification paper analysis
+# Subclassification analysis
 # Ellie Colson
 # 2/13/15
 
@@ -39,7 +39,7 @@ generateData <- function(n, tx.mech = 1, tx.hetero = F, ATT = F) {
   # Sample from population with probability conditional on W1, W3, W4
   in_sample <- rbinom(nn, size = 1, abs((n/nn) + (n/nn*.25)*(W1 - W3 + W4 - 2.75)))
   
-  survey_weights <- 1/abs((n/nn) + (n/nn*.25)*(W1 - W3 + W4 - 2.8))
+  survey_weights <- 1/abs((n/nn) + (n/nn*.25)*(W1 - W3 + W4 - 2.75)) #### 2.75 v 2.8-- re-run
   
   # NCS-A weights range between about 82 and about 40,000 and are heavily skewed. Replicate using gamma distribution and randomly assign.
   # survey_weights <- rgamma(n, 0.5, 2)*7000+82
@@ -204,6 +204,7 @@ table(m$A)
 round(as.matrix(table(m$A, m$subclass))/as.matrix(rbind(table(m$subclass), table(m$subclass))),2) # Proportion of each subclass that is control v treated
 table(m$A, m$subclass)
 
+# This does not work to get variance for ATT:
 # z.out3 <- zelig(Y ~ A, data = match.data(match, "treat"), weights="survey_weights", model = "ls", by = "subclass")
 # z.out3 <- zelig(Y ~ A, data = m, weights = "survey_weights", model = "ls", by = "subclass")
 # z.out3 <- zelig(Y ~ A, data = m, weights = "weights", model = "ls", by = "subclass")
@@ -269,7 +270,7 @@ table(m$A, m$subclass)
 
 
 ## Analysis function -------------------------------------------------------
-
+# For testing: iteration=1; tx.mech = 1; tx.hetero = T; ATT = F; cor.spec.pscore = T; n.subclass = 10; svy.wt = F; n = 100000
 analyze <- function(iteration, tx.mech = 1, tx.hetero = F, ATT = F, cor.spec.pscore = T, n.subclass = 10, svy.wt = F, n = 3000) {
   library("MatchIt")
   library("survey")
@@ -310,23 +311,25 @@ analyze <- function(iteration, tx.mech = 1, tx.hetero = F, ATT = F, cor.spec.psc
       try(model <- glm(Y ~ A, data = Obs, subset = (Obs$subclass == i)))
       if (sum(Obs$A[Obs$subclass == i])>0 & sum(Obs$A[Obs$subclass==i]==0)>0) {
         ests[i] <-  summary(model)$coefficients[2,1] 
-        #if (ATT == F) var[i]  <- (summary(model)$coefficients[2,2])^2
-        var[i]  <- (summary(model)$coefficients[2,2])^2
+        if (ATT == F) var[i]  <- (summary(model)$coefficients[2,2])^2
       }
     }
   }
   
   # Get variance estimates for ATT
   if (ATT == T) {
+    
     # Estimate the propensity score for each observation
     mod <- glm(A ~ I(poly(W1,2)) + W2 + W1:W2, data = Obs, family = "binomial")
     e <- predict(mod, type = "response")
+    
     # Estimate the predicted outcome if tx = 1 and if tx = 0 using the true parametric model
     mod <- glm(Y ~ I(poly(W1,2)) + W2 + A + A:I(poly(W1,2)) + A:W2, data = Obs)
     tx <- ct <- Obs
     tx$A <- 1; ct$A <- 0
     mu1 <- predict(mod, newdata = tx, type = "response")
     mu0 <- predict(mod, newdata = ct, type = "response")
+    
     # Estimate EIC for each observation within each subclass
     # e(x): the propensity score. This is specific to the observation.
     # w: treatment. 0=no, 1=yes. This is also specific to the observation.
@@ -337,8 +340,18 @@ analyze <- function(iteration, tx.mech = 1, tx.hetero = F, ATT = F, cor.spec.psc
     w <- Obs$A; y <- Obs$Y; tau <- ests[Obs$subclass]
     EIC <- ((w*y/e) - ((1-w)*y/(1-e))) - tau - (mu1/e + mu0/(1-e))*(w - e)
     # Estimate variance for treated observations within each subclass:  get the sample variance of those in the stratum-specific treatment group by calculating the variance of those in the treatment group in stratum a and dividing by the number in the treatment group in stratum a.
-    var <- sapply(1:n.subclass, function(x) var(EIC[Obs$subclass==x & Obs$A==1])/nrow(Obs[Obs$subclass==x & Obs$A==1,]) )
     
+    # Kara new eic
+    eic.new <-((Obs$A/e) - ((1-Obs$A)/(1-e)))*Obs$Y - 2
+    var2 <- sapply(1:n.subclass, function(x) var(eic.new[Obs$subclass==x])/nrow(Obs[Obs$subclass==x,]))
+    
+    var; var2
+    rbind(var, var2)
+    
+    # Var for ATT:
+    var <- sapply(1:n.subclass, function(x) var(EIC[Obs$subclass==x & Obs$A==1])/nrow(Obs[Obs$subclass==x & Obs$A==1,]) )
+    # Var for ATE: 
+    #Var <- sapply(1:n.subclass, function(x) var(EIC[Obs$subclass==x]) / nrow(Obs[Obs$subclass==x,]) )
   }
   
   if (ATT == F) combo1 <- weighted.mean(ests[!is.na(ests)], w = as.numeric(table(Obs$subclass)[!is.na(ests)]))
